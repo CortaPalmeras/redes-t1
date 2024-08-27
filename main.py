@@ -1,6 +1,9 @@
-from src import *
+from social_media_server import MultiSocialMediaServer
 
 VALID_SOCIAL_MEDIA = set(['instagram','whatsapp','twitter','telegram'])
+
+IP = 'localhost'
+PORT = 8080
 
 if __name__ == '__main__':
     server = MultiSocialMediaServer(VALID_SOCIAL_MEDIA)

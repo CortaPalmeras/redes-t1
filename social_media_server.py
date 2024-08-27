@@ -1,14 +1,20 @@
 import socket as skt
-from abc import ABC, abstractmethod
-
-from .database_queries import PersonQuery, QueryError, QueryValidator
-
-IP = 'localhost'
-PORT = 8080
 
 BUFFSIZE = 1024
 
-class SocialMediaServer(ABC):
+class PersonQuery:
+    def __init__(self, social:str, name: str):
+        self.social = social
+        self.name = name
+
+class QueryError:
+    def __init__(self, value: str) -> None:
+        self.value = value
+
+def valid_name(name: str):
+    return name.islower() and name.isalpha() and name.isascii()
+
+class SocialMediaServer():
     def __init__(self) -> None:
         self.socket = skt.socket(skt.AF_INET, skt.SOCK_STREAM)
 
@@ -20,9 +26,15 @@ class SocialMediaServer(ABC):
     def close(self) -> None:
         self.socket.close()
 
-    @abstractmethod
     def validate_query(self, query_parts: list[str]) -> PersonQuery | QueryError:
-        pass
+        if len(query_parts) < 3:
+            return QueryError(f'invalid ammount of arguments: {len(query_parts)}')
+
+        for name in query_parts:
+            if not valid_name(name):
+                return QueryError(f'name "{name}" contains an invalid character.')
+
+        return PersonQuery('all', ' '.join(query_parts))
 
     def parse_http(self, message: str) -> PersonQuery | QueryError:
         header, _ = message.split(sep="\r\n\r\n", maxsplit=1)
@@ -41,7 +53,7 @@ class SocialMediaServer(ABC):
         _ = con_socket.send(response.encode())
 
     def respond_bad_request(self, con_socket: skt.socket, error: QueryError) -> None:
-        response = f'HTTP/1.1 400 BAD REQUEST\r\n\r\n{error.reason}\r\n'
+        response = f'HTTP/1.1 400 BAD REQUEST\r\n\r\n{error.value}\r\n'
         _ = con_socket.send(response.encode())
 
     def respond_not_found(self) -> None:
@@ -59,42 +71,26 @@ class SocialMediaServer(ABC):
             if isinstance(query, QueryError):
                 self.respond_bad_request(con_socket, query)
             else:
-                self.respond_success(con_socket, f"{query.social}, {query.fnames}, {query.lnames}")
+                self.respond_success(con_socket, f"{query.social}, {query.name}")
 
             con_socket.close()
-
-
-class SingleSocialMediaServer(SocialMediaServer):
-    def __init__(self, social: str) -> None:
-        super().__init__()
-        self.social = social
-        self.validator = QueryValidator(socials={social}, allows_all=False)
-
-    def validate_query(self, query_parts: list[str]) -> PersonQuery | QueryError:
-        if len(query_parts) < 3:
-            return QueryError(f'invalid ammount of arguments: {len(query_parts)}')
-
-        social = self.social
-        fnames = query_parts[0: -2]
-        lnames = query_parts[-2:]
-
-        return self.validator.validate(social, fnames, lnames)
 
 class MultiSocialMediaServer(SocialMediaServer):
     def __init__(self, socials: set[str]) -> None:
         super().__init__()
         self.socials = socials
-        self.validator = QueryValidator(socials=socials, allows_all=True)
 
     def validate_query(self, query_parts: list[str]) -> PersonQuery | QueryError:
-        if len(query_parts) < 4:
-            return QueryError(f'invalid ammount of arguments: {len(query_parts)}')
-
         social = query_parts[0]
-        fnames = query_parts[1: -2]
-        lnames = query_parts[-2:]
+        names = query_parts[1:]
 
-        return self.validator.validate(social, fnames, lnames)
-        
+        if social != 'all' and social not in self.socials:
+            return QueryError(f'requested plataform "{social}" not in the list of allowed plataforms:\n{self.socials}')
 
+        name_validation = super().validate_query(names)
+
+        if isinstance(name_validation, QueryError):
+            return name_validation
+
+        return PersonQuery(social, name_validation.name) 
 

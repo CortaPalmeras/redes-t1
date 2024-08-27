@@ -1,20 +1,28 @@
 import sqlite3
 
+from .queries import PersonQuery
+
+class SocialMediaDatabase:
+    def __init__(self, file: str) -> None:
+        self.con = sqlite3.connect(file)
+        self.cur = con.cursor()
+
+    def execute(self, query: PersonQuery):
+        if query.social == 'all':
+            result = self.cur.execute("SELECT ...")
+
+        else:
+            result = self.cur.execute("SELECT ...")
+
+        return result
+
 con = sqlite3.connect("social.db")
 
 cur = con.cursor()
+
 _ = cur.execute("DROP TABLE movie")
 
 _ = cur.execute("CREATE TABLE movie(title, year, score)")
-
-_ = cur.execute("""
-    INSERT INTO movie VALUES
-        ('Monty Python and the Holy Grail', 1975, 8.2),
-        ('And Now for Something Completely Different', 1971, 7.5)
-""")
-
-con.commit()
-
 
 data = [
     ("Monty Python Live at the Hollywood Bowl", 1982, 7.9),
