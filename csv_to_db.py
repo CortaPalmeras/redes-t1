@@ -9,7 +9,8 @@ if len(sys.argv) != 2:
 
 data_dirname = 'data'
 
-if os.path.exists(data_dirname) and not os.path.isdir(data_dirname):
+if os.path.exists(data_dirname):
+    if not os.path.isdir(data_dirname):
         print(f'no se puede crear directorio "{data_dirname}"')
         exit(1)
 else:
@@ -36,6 +37,7 @@ with open(sys.argv[1]) as file, \
     sqlite3.connect(f'{data_dirname}/whatsapp.db') as whatsapp,   \
     sqlite3.connect(f'{data_dirname}/others.db') as others:
 
+    _ = file.readline()
     reader = csv.reader(file, delimiter=',', quotechar='"')
 
     instagram_people: list[tuple[str, str]] = list()
@@ -53,13 +55,16 @@ with open(sys.argv[1]) as file, \
     instagram_cur = instagram.cursor()
     _ = instagram_cur.execute("CREATE TABLE person(fullname, handler)")
     _ = instagram_cur.executemany("INSERT INTO person VALUES (?, ?)", instagram_people)
+    instagram.commit()
 
     whatsapp_cur = whatsapp.cursor()
     _ = whatsapp_cur.execute("CREATE TABLE person(fullname, handler)")
     _ = whatsapp_cur.executemany("INSERT INTO person VALUES (?, ?)", whatsapp_people)
+    whatsapp.commit()
 
     others_cur = others.cursor()
     _ = others_cur.execute("CREATE TABLE person(fullname, andler, social)")
     _ = others_cur.executemany("INSERT INTO person VALUES (?, ?, ?)", others_people)
+    others.commit()
 
 
