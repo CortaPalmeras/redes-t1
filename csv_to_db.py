@@ -40,31 +40,27 @@ with open(sys.argv[1]) as file, \
     _ = file.readline()
     reader = csv.reader(file, delimiter=',', quotechar='"')
 
-    instagram_people: list[tuple[str, str]] = list()
-    whatsapp_people: list[tuple[str, str]] = list()
-    others_people: list[tuple[str, str, str]] = list()
+    instagram_cur = instagram.cursor()
+    whatsapp_cur = whatsapp.cursor()
+    others_cur = others.cursor()
+
+    _ = instagram_cur.execute("CREATE TABLE person(fullname, handler)")
+    _ = whatsapp_cur.execute("CREATE TABLE person(fullname, handler)")
+    _ = others_cur.execute("CREATE TABLE person(fullname, social, handler)")
 
     for row in reader:
         if row[2] == 'instagram':
-            instagram_people.append((format_name(row[0], row[1]), row[3]))
+            _ = instagram_cur.execute("INSERT INTO person VALUES (?, ?)", 
+                                          (format_name(row[0], row[1]), row[3]))
         elif row[2] == 'whatsapp':
-            whatsapp_people.append((format_name(row[0], row[1]), row[3]))
+            _ = whatsapp_cur.execute("INSERT INTO person VALUES (?, ?)",
+                                         (format_name(row[0], row[1]), row[3]))
         else:
-            others_people.append((format_name(row[0], row[1]), row[3], row[2]))
-
-    instagram_cur = instagram.cursor()
-    _ = instagram_cur.execute("CREATE TABLE person(fullname, handler)")
-    _ = instagram_cur.executemany("INSERT INTO person VALUES (?, ?)", instagram_people)
+            _ = others_cur.execute("INSERT INTO person VALUES (?, ?, ?)",
+                                       (format_name(row[0], row[1]), row[2], row[3]))
+    
     instagram.commit()
-
-    whatsapp_cur = whatsapp.cursor()
-    _ = whatsapp_cur.execute("CREATE TABLE person(fullname, handler)")
-    _ = whatsapp_cur.executemany("INSERT INTO person VALUES (?, ?)", whatsapp_people)
     whatsapp.commit()
-
-    others_cur = others.cursor()
-    _ = others_cur.execute("CREATE TABLE person(fullname, andler, social)")
-    _ = others_cur.executemany("INSERT INTO person VALUES (?, ?, ?)", others_people)
     others.commit()
 
 

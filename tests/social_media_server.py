@@ -1,26 +1,10 @@
 import socket as skt
 import sqlite3
-from typing import cast
+
+from query_validation import *
+from databases import *
 
 BUFFSIZE = 1024
-
-class ValidQuery:
-    def __init__(self, name: str, social:str):
-        self.name = name
-        self.social = social
-
-class QueryError:
-    def __init__(self, value: str) -> None:
-        self.value = value
-
-DatabaseResult = list[str]
-
-class DatabaseError:
-    def __init__(self, value: str) -> None:
-        self.value = value
-
-def valid_name(name: str):
-    return name.islower() and name.isalpha() and name.isascii()
 
 class SocialMediaServer():
     def __init__(self, data: str) -> None:
@@ -36,16 +20,6 @@ class SocialMediaServer():
     def close(self) -> None:
         self.socket.close()
 
-    def validate_query(self, query_parts: list[str]) -> ValidQuery | QueryError:
-        if len(query_parts) < 3:
-            return QueryError(f'invalid ammount of arguments: {len(query_parts)}')
-
-        for name in query_parts:
-            if not valid_name(name):
-                return QueryError(f'name "{name}" contains an invalid character.')
-
-        return ValidQuery(' '.join(query_parts), 'all')
-
     def parse_http(self, message: str) -> ValidQuery | QueryError:
         header, _ = message.split(sep="\r\n\r\n", maxsplit=1)
         method_string, _ = header.split(sep='\r\n', maxsplit=1)
@@ -57,15 +31,6 @@ class SocialMediaServer():
         query_parts = uri.strip('/').split(sep='/')
         
         return self.validate_query(query_parts)
-
-    def query_database(self, query: ValidQuery) -> DatabaseResult | DatabaseError:
-        result = self.cur.execute('SELECT * FROM person WHERE fullname = ?', (query.name,)).fetchall()
-        if len(result) == 0:
-            return DatabaseError("no result found for the specified person")
-        else:
-            result = cast(list[tuple[str,str]], result)
-            data = [ ','.join(value) for value in result ]
-            return DatabaseResult(data)
 
     def respond_success(self, con_socket: skt.socket, data: DatabaseResult) -> None:
         data_as_csv = '\r\n'.join(data)
@@ -108,33 +73,4 @@ class MultiSocialMediaServer(SocialMediaServer):
         db_socials = cast(list[tuple[str]], db_socials)
         self.socials: set[str] = { social[0] for social in db_socials }
 
-    def query_database(self, query: ValidQuery) -> DatabaseResult | DatabaseError:
-        if query.social == 'all':
-            return super().query_database(query)
-
-        result = self.cur.execute(
-            'SELECT * FROM person WHERE fullname= ? AND social = ?',
-            (query.name, query.social)
-        ).fetchall()
-
-        if len(result) == 0:
-            return DatabaseError("no result found for the specified person and social media pair")
-        else:
-            result = cast(list[tuple[str,str]], result)
-            data = [ ','.join(value) for value in result ]
-            return DatabaseResult(data)
-
-    def validate_query(self, query_parts: list[str]) -> ValidQuery | QueryError:
-        social = query_parts[0]
-        names = query_parts[1:]
-
-        if social != 'all' and social not in self.socials:
-            return QueryError(f'requested plataform "{social}" not in the list of allowed plataforms:\n{self.socials}')
-
-        name_validation = super().validate_query(names)
-
-        if isinstance(name_validation, QueryError):
-            return name_validation
-
-        return ValidQuery(name_validation.name, social) 
 
