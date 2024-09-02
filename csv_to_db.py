@@ -33,34 +33,40 @@ def format_name(fname: str, lname: str) -> str:
     .replace('ú', 'u')  \
 
 with open(sys.argv[1]) as file, \
-    sqlite3.connect(f'{data_dirname}/instagram.db') as instagram, \
-    sqlite3.connect(f'{data_dirname}/whatsapp.db') as whatsapp,   \
-    sqlite3.connect(f'{data_dirname}/others.db') as others:
+    sqlite3.connect(f'{data_dirname}/instagram.db') as insta_db, \
+    sqlite3.connect(f'{data_dirname}/whatsapp.db') as whats_db,   \
+    sqlite3.connect(f'{data_dirname}/others.db') as other_db:
 
     _ = file.readline()
     reader = csv.reader(file, delimiter=',', quotechar='"')
 
-    instagram_cur = instagram.cursor()
-    whatsapp_cur = whatsapp.cursor()
-    others_cur = others.cursor()
+    insta_cur = insta_db.cursor()
+    whats_cur = whats_db.cursor()
+    other_cur = other_db.cursor()
 
-    _ = instagram_cur.execute("CREATE TABLE person(fullname, handler)")
-    _ = whatsapp_cur.execute("CREATE TABLE person(fullname, handler)")
-    _ = others_cur.execute("CREATE TABLE person(fullname, social, handler)")
+    _ = insta_cur.execute("DROP TABLE IF EXISTS person")
+    _ = whats_cur.execute("DROP TABLE IF EXISTS person")
+    _ = other_cur.execute("DROP TABLE IF EXISTS person")
 
+    _ = insta_cur.execute("CREATE TABLE person(fullname, handler, " \
+                          + "CONSTRAINT person_pkey PRIMARY KEY (fullname))")
+    _ = whats_cur.execute("CREATE TABLE person(fullname, handler, " \
+                          + "CONSTRAINT person_pkey PRIMARY KEY (fullname))")
+    _ = other_cur.execute("CREATE TABLE person(fullname, social, handler, " \
+                          + "CONSTRAINT person_pkey PRIMARY KEY (fullname, social))")
     for row in reader:
-        if row[2] == 'instagram':
-            _ = instagram_cur.execute("INSERT INTO person VALUES (?, ?)", 
-                                          (format_name(row[0], row[1]), row[3]))
-        elif row[2] == 'whatsapp':
-            _ = whatsapp_cur.execute("INSERT INTO person VALUES (?, ?)",
-                                         (format_name(row[0], row[1]), row[3]))
-        else:
-            _ = others_cur.execute("INSERT INTO person VALUES (?, ?, ?)",
-                                       (format_name(row[0], row[1]), row[2], row[3]))
-    
-    instagram.commit()
-    whatsapp.commit()
-    others.commit()
+        match row[2]:
+            case 'instagram':
+                _ = insta_cur.execute("INSERT INTO person VALUES (?, ?)", 
+                                            (format_name(row[0], row[1]), row[3]))
+            case 'whats_db':
+                _ = whats_cur.execute("INSERT INTO person VALUES (?, ?)",
+                                            (format_name(row[0], row[1]), row[3]))
+            case _:
+                _ = other_cur.execute("INSERT INTO person VALUES (?, ?, ?)",
+                                        (format_name(row[0], row[1]), row[2], row[3]))
+    insta_db.commit()
+    whats_db.commit()
+    other_db.commit()
 
 
