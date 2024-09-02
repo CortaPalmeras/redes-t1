@@ -6,8 +6,6 @@ class ValidQuery(typing.NamedTuple):
 
 QueryError = str
 
-QueryValidator = typing.Callable[[list[str]], ValidQuery | QueryError]
-
 def valid_name(name: str) -> bool:
     return name.islower() and name.isalpha() and name.isascii()
 
@@ -32,7 +30,7 @@ def simple_query_validator():
     return validate_simple_query
 
 
-def multisocial_query_validator(socials: set[str]) -> QueryValidator:
+def multisocial_query_validator(socials: set[str]):
     def validate_multisocial_query(query_parts: list[str]) -> ValidQuery | QueryError:
         social = query_parts[0]
         names = query_parts[1:]

@@ -7,10 +7,7 @@ DatabaseResult = list[str]
 
 DatabaseError = str
 
-DatabaseQueryHandler = typing.Callable[[qv.ValidQuery], DatabaseResult | DatabaseError]
-
-
-def simple_query_handler(cursor: sqlite3.Cursor, social: str):
+def simple_databse_handler(cursor: sqlite3.Cursor, social: str):
 
     def query_database(query: qv.ValidQuery) -> DatabaseResult | DatabaseError:
         result = cursor.execute(
@@ -18,17 +15,19 @@ def simple_query_handler(cursor: sqlite3.Cursor, social: str):
             (query.name,)
         ).fetchall()
 
+        print((query.name,))
+
         if len(result) == 0:
             return DatabaseError("no result found for the specified person")
 
         else:
             result = typing.cast(list[tuple[str]], result)
-            return DatabaseResult(social + ',' + result[0][0])
+            return DatabaseResult([social + ',' + result[0][0]])
 
     return query_database
 
 
-def multisocial_query_handler(cursor: sqlite3.Cursor):
+def multisocial_database_handler(cursor: sqlite3.Cursor):
 
     def query_multisocial_database(query: qv.ValidQuery) -> DatabaseResult | DatabaseError:
         if query.social == 'all':

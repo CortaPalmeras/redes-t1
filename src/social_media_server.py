@@ -1,37 +1,44 @@
 import socket as skt
 import sqlite3
 
-from .query_validation import *
-from .databases import *
+from . import query_validation as qv
+from . import databases as db
+from . import http_parse as http
 
 BUFFSIZE = 1024
 
-class SocialMediaServer():
-    def __init__(self, data: str) -> None:
-        self.socket = skt.socket(skt.AF_INET, skt.SOCK_STREAM)
-        self.con = sqlite3.connect(data)
-        self.cur = self.con.cursor()
 
-    def open(self, ip: str, port: int) -> None:
+def success(data: str) -> str:
+    return f'HTTP/1.1 200 OK\r\n\r\n{data}\r\n'
+
+def bad_request(error: str) -> str:
+    return f'HTTP/1.1 400 BAD REQUEST\r\n\r\n{error}\r\n'
+
+def not_found(error: str) -> str:
+    return f'HTTP/1.1 404 NOT FOUND\r\n\r\n{error}\r\n'
+
+def respond(con_socket: skt.socket, response: str) -> None:
+    _ = con_socket.send(response.encode())
+    con_socket.close()
+
+
+class SocialMediaServer():
+    def __init__(self, ip: str, port: int, data: str, social: str) -> None:
+        self.socket = skt.socket(skt.AF_INET, skt.SOCK_STREAM)
         self.socket.setsockopt(skt.SOL_SOCKET, skt.SO_REUSEADDR, 1)
         self.socket.bind((ip, port))
         self.socket.listen(1)
 
-    def close(self) -> None:
+        self.con = sqlite3.connect(data)
+        self.cur = self.con.cursor()
+
+        self.query_validator = qv.simple_query_validator()
+        self.database_handler = db.simple_databse_handler(self.cur, social)
+
+    def __del__(self):
         self.socket.close()
-
-    def respond_success(self, con_socket: skt.socket, data: DatabaseResult) -> None:
-        data_as_csv = '\r\n'.join(data)
-        response = f'HTTP/1.1 200 OK\r\n\r\n{data_as_csv}\r\n'
-        _ = con_socket.send(response.encode())
-
-    def respond_bad_request(self, con_socket: skt.socket, error: QueryError) -> None:
-        response = f'HTTP/1.1 400 BAD REQUEST\r\n\r\n{error.value}\r\n'
-        _ = con_socket.send(response.encode())
-
-    def respond_not_found(self, con_socket: skt.socket, error: DatabaseError) -> None:
-        response = f'HTTP/1.1 404 NOT FOUND\r\n\r\n{error.value}\r\n'
-        _ = con_socket.send(response.encode())
+        self.cur.close()
+        self.con.close()
 
     def run(self) -> None:
         while True:
@@ -40,25 +47,29 @@ class SocialMediaServer():
 
             message = con_socket.recv(BUFFSIZE)
 
-            query = self.parse_http(message.decode())
+            request = http.parse_http(message.decode())
 
-            if isinstance(query, QueryError):
-                self.respond_bad_request(con_socket, query)
-            else:
-                data = self.query_database(query)
-                if isinstance(data, DatabaseError):
-                    self.respond_not_found(con_socket, data)
-                else:
-                    self.respond_success(con_socket, data)
+            if isinstance(request, http.RequestError):
+                respond(con_socket, bad_request(request))
+                continue
 
-            con_socket.close()
+            query = self.query_validator(request)
+            if isinstance(query, qv.QueryError):
+                respond(con_socket, bad_request(query))
+                continue
 
+            data = self.database_handler(query)
 
-class MultiSocialMediaServer(SocialMediaServer):
-    def __init__(self, data: str) -> None:
-        super().__init__(data)
-        db_socials = self.cur.execute('SELECT DISTINCT social FROM person').fetchall()
-        db_socials = cast(list[tuple[str]], db_socials)
-        self.socials: set[str] = { social[0] for social in db_socials }
+            if isinstance(data, db.DatabaseError):
+                respond(con_socket, not_found(data))
+                continue
+
+            respond(con_socket, success(data[0]))
 
 
+# class MultiSocialMediaServer(SocialMediaServer):
+#     def __init__(self, data: str) -> None:
+#         super().__init__(data)
+#         db_socials = self.cur.execute('SELECT DISTINCT social FROM person').fetchall()
+#         db_socials = cast(list[tuple[str]], db_socials)
+#         self.socials: set[str] = { social[0] for social in db_socials }

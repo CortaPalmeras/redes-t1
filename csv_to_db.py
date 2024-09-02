@@ -2,6 +2,7 @@ import csv
 import sqlite3
 import sys
 import os
+from collections import defaultdict
 
 if len(sys.argv) != 2:
     print(f"uso: python {sys.argv[0]} <archivo csv>")
@@ -20,7 +21,6 @@ for filename in ['instagram.db', 'whatsapp.db', 'others.db']:
     filepath = f'{data_dirname}/{filename}'
     if os.path.exists(filepath):
         os.remove(filepath)
-
 
 def format_name(fname: str, lname: str) -> str:
     return ' '.join(f'{fname} {lname}'.split()) \
