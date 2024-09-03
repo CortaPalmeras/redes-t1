@@ -45,6 +45,7 @@ def internal_server_error(error: str) -> bytes:
 def request_http(addres: tuple[str, int], path: str) -> str:
     request = f'GET {path} HTTP/1.1\r\n\r\n'
     with skt.create_connection(addres) as connection:
+        print(f'querying {addres[0]}:{addres[1]} for {path}')
         connection.sendall(request.encode())
         result = connection.recv(BUFFSIZE).decode()
         return result

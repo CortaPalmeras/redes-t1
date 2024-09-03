@@ -13,6 +13,7 @@ class QueryError:
     def __init__(self, value: str) -> None:
         self.value = value
 
+# Servidor lider, es el que envía requests a los servidores que entregan datos
 class MasterServer():
     def __init__(self, ip: str, port: int, servers: dict[str, tuple[str, int, str]]) -> None:
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -37,6 +38,7 @@ class MasterServer():
 
     def query_servers(self, query: qv.ValidQuery) -> bytes:
 
+        # si la query es 'all' se le hace una request a todos los servidores hijos
         if query.social == 'all':
             for key in self.simple_servers:
                 self.pool.put_task(http.async_http_request(self.servers[key], query.name))
@@ -51,29 +53,49 @@ class MasterServer():
                     print(res.error)
                     return http.internal_server_error('something went wrong')
 
-                else:
-                    match res.status_code:
-                        case '200': response += res.body
-                        case '404': continue
-                        case '400': 
-                            print(f'a child server returned bad request: {res.body}')
-                            return http.bad_request(res.body)
-                        case _:
-                            print('got an invalid status code')
-                            return http.internal_server_error('something went wrong')
+                match res.status_code:
+                    case '200': response += res.body
+                    case '404': continue
+                    case '400': 
+                        print(f'a child server returned bad request: {res.body}')
+                        return http.bad_request(res.body)
+                    case _:
+                        print('got an invalid status code')
+                        return http.internal_server_error('something went wrong')
 
             if response == '':
                 print('child servers returned no results')
                 return http.not_found('no result found for the specified person')
+            else:
+                print(f'query returned:\n{response}')
+                return http.success(response)
 
-        elif query.social in self.simple_servers:
-            response = http.request_http(self.servers[query.social], query.name)
-
+        # si la query es una red social en especifico se le hace una request solo a un servidor
         else:
-            response  = http.request_http(self.servers['others'], '/all' + query.name)
+            if query.social in self.simple_servers:
+                resp = http.request_http(self.servers[query.social], query.name)
+            else:
+                resp = http.request_http(self.servers['others'], '/' + query.social + query.name)
 
-        print(f'query returned:\n{response}')
-        return http.success(response)
+            parsed = http.parse_response(resp)
+
+            if isinstance(parsed, http.HttpParseError):
+                print(parsed.error)
+                return http.internal_server_error('something went wrong')
+            
+            match parsed.status_code:
+                case '200':
+                    print(f'query returned: {parsed.body}')
+                    return http.success(parsed.body)
+                case '404': 
+                    print('child server returned not found')
+                    return http.not_found(parsed.body)
+                case '400': 
+                    print('child server returned bad request')
+                    return http.bad_request(parsed.body)
+                case _:
+                    print('got an invalid status code')
+                    return http.internal_server_error('something went wrong')
 
 
     def run(self) -> None:
