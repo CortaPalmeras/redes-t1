@@ -2,25 +2,6 @@ import csv
 import sqlite3
 import sys
 import os
-from collections import defaultdict
-
-if len(sys.argv) != 2:
-    print(f"uso: python {sys.argv[0]} <archivo csv>")
-    exit(1)
-
-data_dirname = 'data'
-
-if os.path.exists(data_dirname):
-    if not os.path.isdir(data_dirname):
-        print(f'no se puede crear directorio "{data_dirname}"')
-        exit(1)
-else:
-    os.mkdir(path=data_dirname)
-
-for filename in ['instagram.db', 'whatsapp.db', 'others.db']:
-    filepath = f'{data_dirname}/{filename}'
-    if os.path.exists(filepath):
-        os.remove(filepath)
 
 def format_name(fname: str, lname: str) -> str:
     return ' '.join(f'{fname} {lname}'.split()) \
@@ -32,41 +13,72 @@ def format_name(fname: str, lname: str) -> str:
     .replace('ó', 'o')  \
     .replace('ú', 'u')  \
 
-with open(sys.argv[1]) as file, \
-    sqlite3.connect(f'{data_dirname}/instagram.db') as insta_db, \
-    sqlite3.connect(f'{data_dirname}/whatsapp.db') as whats_db,   \
-    sqlite3.connect(f'{data_dirname}/others.db') as other_db:
+if len(sys.argv) != 2:
+    print(f"use: {os.path.basename(sys.executable)} {sys.argv[0]} <csv file>")
+    exit(1)
 
-    _ = file.readline()
-    reader = csv.reader(file, delimiter=',', quotechar='"')
 
-    insta_cur = insta_db.cursor()
-    whats_cur = whats_db.cursor()
-    other_cur = other_db.cursor()
+# crear directorio de datos
+data_dirname = 'data'
+if os.path.exists(data_dirname):
+    if not os.path.isdir(data_dirname):
+        print(f'error creating directory "{data_dirname}"')
+        exit(1)
+else:
+    os.mkdir(path=data_dirname)
 
-    _ = insta_cur.execute("DROP TABLE IF EXISTS person")
-    _ = whats_cur.execute("DROP TABLE IF EXISTS person")
-    _ = other_cur.execute("DROP TABLE IF EXISTS person")
+# leer lista de servidores
+servers: dict[str, str] = {}
+with open('servers.csv') as file:
+    reader = csv.reader(file)
+    _ = next(reader)
 
-    _ = insta_cur.execute("CREATE TABLE person(fullname, handler, " \
-                          + "CONSTRAINT person_pkey PRIMARY KEY (fullname))")
-    _ = whats_cur.execute("CREATE TABLE person(fullname, handler, " \
-                          + "CONSTRAINT person_pkey PRIMARY KEY (fullname))")
-    _ = other_cur.execute("CREATE TABLE person(fullname, social, handler, " \
-                          + "CONSTRAINT person_pkey PRIMARY KEY (fullname, social))")
     for row in reader:
-        match row[2]:
-            case 'instagram':
-                _ = insta_cur.execute("INSERT INTO person VALUES (?, ?)", 
-                                            (format_name(row[0], row[1]), row[3]))
-            case 'whats_db':
-                _ = whats_cur.execute("INSERT INTO person VALUES (?, ?)",
-                                            (format_name(row[0], row[1]), row[3]))
-            case _:
-                _ = other_cur.execute("INSERT INTO person VALUES (?, ?, ?)",
-                                        (format_name(row[0], row[1]), row[2], row[3]))
-    insta_db.commit()
-    whats_db.commit()
-    other_db.commit()
+        servers[row[0]] = row[3]
 
+
+# se elimina master y others
+others_filename = servers['others']
+del servers['master']
+del servers['others']
+
+
+# se crea la base de datos de others
+others_db = sqlite3.connect(others_filename)
+others_cur = others_db.cursor()
+_ = others_cur.execute("DROP TABLE IF EXISTS person")
+_ = others_cur.execute("CREATE TABLE person(fullname, social, handler, " \
+                       + "CONSTRAINT person_pkey PRIMARY KEY (fullname, social))")
+
+
+# se crea el resto de bases de datos
+simple_servers = set(servers.keys())
+databases = {key: sqlite3.connect(filename) for key, filename in servers.items()}
+cursors = {key: db.cursor() for key, db in databases.items()}
+
+for cur in cursors.values():
+    _ = cur.execute("DROP TABLE IF EXISTS person")
+    _ = cur.execute("CREATE TABLE person(fullname, handler, " \
+                        + "CONSTRAINT person_pkey PRIMARY KEY (fullname))")
+
+
+with open(sys.argv[1]) as file:
+    reader = csv.reader(file, delimiter=',', quotechar='"')
+    _ = next(reader)
+
+    for row in reader:
+        if row[2] in simple_servers:
+            _ = cursors[row[2]].execute("INSERT INTO person VALUES (?, ?)", 
+                                        (format_name(row[0], row[1]), row[3]))
+        else:
+            _ = others_cur.execute("INSERT INTO person VALUES (?, ?, ?)",
+                                   (format_name(row[0], row[1]), row[2], row[3]))
+
+
+others_db.commit()
+others_db.close()
+
+for db in databases.values():
+    db.commit()
+    db.close()
 

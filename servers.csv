@@ -1,0 +1,5 @@
+server,database,ip,port
+master,localhost,43820,
+others,localhost,43821,data/others.db
+instagram,localhost,43822,data/instagram.db
+whatsapp,localhost,43823,data/whatsapp.db
